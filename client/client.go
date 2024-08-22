@@ -55,7 +55,7 @@ func (c *ShellBoxClient) Init(https bool, crt, key, rootcrt string) {
 // Run ShellBoxClient
 // func (c *ShellBoxClient) Run(https bool, username, password, host, post, contentpath string) {
 func (c *ShellBoxClient) Run(parma *params.Parameter) {
-	path, err := LoginServer(parma.HTTPS, parma.Username, parma.Password, parma.Host, parma.Port, parma.ContentPath, c.GetJSON)
+	path, err := LoginServer(parma.IsHttps, parma.Username, parma.Password, parma.URLNoScheme, c.GetJSON)
 	if err != nil {
 		log.Println("Login to Server failed:", err.Error())
 		return
@@ -109,6 +109,6 @@ func (c *ShellBoxClient) GetWebsocket(url string, headers ...map[string]string) 
 
 func Run(parms *params.Parameter) {
 	c := new(ShellBoxClient)
-	c.Init(parms.HTTPS, parms.CrtFile, parms.KeyFile, parms.RootCrtFile)
+	c.Init(parms.IsHttps, parms.CrtFile, parms.KeyFile, parms.RootCrtFile)
 	c.Run(parms)
 }

@@ -18,7 +18,7 @@ import (
 )
 
 // LoginServer get websocket path
-func LoginServer(https bool, username, password, host, port, contentpath string, get func(url string) (map[string]interface{}, error)) (string, error) {
+func LoginServer(https bool, username, password, URLNoScheme string, get func(url string) (map[string]interface{}, error)) (string, error) {
 	protocol := "http"
 	if https {
 		protocol = "https"
@@ -26,7 +26,7 @@ func LoginServer(https bool, username, password, host, port, contentpath string,
 	md5User := lib.HashCalculation(md5.New(), username)
 	md5Pass := lib.HashCalculation(md5.New(), password)
 
-	var LoginURL = protocol + "://" + host + ":" + port + contentpath + "/login"
+	var LoginURL = protocol + "://" + URLNoScheme + "/login"
 	data, err := get(LoginURL + "?username=" + md5User + "&password=" + md5Pass)
 	if err != nil {
 		return "", err
@@ -41,16 +41,12 @@ func LoginServer(https bool, username, password, host, port, contentpath string,
 func ConnectSocket(para *params.Parameter, UserAgent string, path string, conn func(url string, headers ...map[string]string) (*websocket.Conn, error)) {
 
 	// func ConnectSocket(https bool, host, port, contentpath, path, UserAgent string, conn func(url string) (*websocket.Conn, error)) {
-	protocol := "ws"
-	if para.HTTPS {
-		protocol = "wss"
-	}
 	var headers = make(map[string]string)
 	if len(para.ProxyPort) > 0 {
 		headers["ProxyPort"] = para.ProxyPort
 	}
 
-	skt, err := conn(protocol+"://"+para.Host+":"+para.Port+para.ContentPath+"/cmd/"+path, headers)
+	skt, err := conn(para.WepSocketProtocol+"://"+para.URLNoScheme+"/cmd/"+path, headers)
 	if err != nil {
 		log.Error("Connect to WebSocket failed:", err.Error())
 		return

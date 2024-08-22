@@ -43,7 +43,7 @@ func (s *ShellBoxServer) upgrade(ContentPath string, h http.Handler) http.Handle
 func (s *ShellBoxServer) Run(params *params.Parameter) {
 	var err error
 	server := &http.Server{Addr: ":" + params.Port, Handler: s}
-	if params.HTTPS {
+	if params.IsHttps {
 		if params.RootCrtFile != "" {
 			server.TLSConfig = &tls.Config{
 				ClientCAs:  lib.ReadCertPool(params.RootCrtFile),

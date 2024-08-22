@@ -3,6 +3,7 @@ package params
 import (
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/user"
@@ -15,20 +16,21 @@ import (
 
 // Parameter Command line parameters
 type Parameter struct {
-	IsServer    bool
-	HTTPS       bool
-	Host        string
-	Port        string
-	Username    string
-	Password    string
-	Command     string
-	ContentPath string
-	CrtFile     string
-	KeyFile     string
-	RootCrtFile string
-	LocalPort   int
-	RemotePort  int
-	ProxyPort   string
+	IsServer          bool
+	IsHttps           bool
+	WepSocketProtocol string
+	URLNoScheme       string
+	Port              string
+	Username          string
+	Password          string
+	Command           string
+	ContentPath       string
+	CrtFile           string
+	KeyFile           string
+	RootCrtFile       string
+	LocalPort         int
+	RemotePort        int
+	ProxyPort         string
 }
 
 // Init Parameter
@@ -43,13 +45,10 @@ func (parms *Parameter) Init(args ...string) (err error) {
 	flagSet.BoolVar(&help, "h", false, "this help")
 	flagSet.BoolVar(&version, "v", false, "show version and exit")
 	flagSet.BoolVar(&(parms.IsServer), "s", false, "server mode")
-	flagSet.BoolVar(&(parms.HTTPS), "https", false, "enable https")
-	flagSet.StringVar(&(parms.Host), "H", "127.0.0.1", "connect to host")
-	flagSet.StringVar(&(parms.Port), "P", "2024", "listening port")
+	flagSet.StringVar(&(parms.URLNoScheme), "H", "http://127.0.0.1:2024", "connect to host")
 	flagSet.StringVar(&(parms.Username), "u", username, "username")
 	flagSet.StringVar(&(parms.Password), "p", password, "password")
 	flagSet.StringVar(&(parms.Command), "cmd", "", "command cmd or bash")
-	flagSet.StringVar(&(parms.ContentPath), "cp", "/shellbox", "content path")
 	flagSet.StringVar(&(parms.CrtFile), "C", "", "crt file")
 	flagSet.StringVar(&(parms.KeyFile), "K", "", "key file")
 	flagSet.StringVar(&(parms.RootCrtFile), "RC", "", "root crt file")
@@ -61,46 +60,59 @@ func (parms *Parameter) Init(args ...string) (err error) {
 		args = os.Args[1:]
 	}
 	err = flagSet.Parse(args)
+	if err != nil {
+		return
+	}
 	if u := os.Getenv("SB_USERNAME"); len(u) != 0 {
 		parms.Username = u
 	}
 	if p := os.Getenv("SB_PASSWORD"); len(p) != 0 {
 		parms.Password = p
 	}
+	var uRL *url.URL
+	if !strings.Contains(parms.URLNoScheme, "://") {
+		parms.URLNoScheme = "http://" + parms.URLNoScheme
+	}
+	uRL, err = url.Parse(parms.URLNoScheme)
 	if err != nil {
-		// fmt.Println(err)
-		return
-		// os.Exit(1)
+		return err
+	}
+	parms.WepSocketProtocol = "ws"
+	if uRL.Scheme == "https" {
+		parms.IsHttps = true
+		parms.WepSocketProtocol = "wss"
+	}
+	if uRL.Port() != "" {
+		parms.Port = uRL.Port()
+	} else {
+		if parms.IsHttps {
+			parms.Port = "443"
+		} else {
+			parms.Port = "80"
+		}
+	}
+	parms.ContentPath = "/shellbox"
+	if uRL.Path != "" && uRL.Path != "/" {
+		parms.ContentPath = uRL.Path
 	}
 	if help {
 		printUsage()
 		flagSet.PrintDefaults()
-		// os.Exit(1)
 		return
 	} else if version {
 		printVersion()
-		// os.Exit(1)
 		return
 	} else {
-		// fmt.Printf("%+v\n", parms)
-		return parms.organize()
+		parms.URLNoScheme = fmt.Sprintf("%s:%s%s", uRL.Hostname(), parms.Port, parms.ContentPath)
+		err = parms.organize()
+		fmt.Printf("%+v\n", parms)
+		return
 	}
 }
 
-// Run start server or client
-// func (parms *Parameter) Run() {
-// if parms.Server {
-// 	server.Run(parms)
-// } else if parms.Client {
-// 	c := new(client.ShellBoxClient)
-// 	c.Init(parms.HTTPS, parms.CrtFile, parms.KeyFile, parms.RootCrtFile)
-// 	c.Run(parms)
-// }
-// }
-
 // organize command line parameters
 func (parms *Parameter) organize() (err error) {
-	if parms.IsServer && parms.HTTPS && (parms.CrtFile == "" || parms.KeyFile == "") {
+	if parms.IsServer && parms.IsHttps && (parms.CrtFile == "" || parms.KeyFile == "") {
 		// println("the crt file and key file are required in server mode.")
 		err = fmt.Errorf("the crt file and key file are required in server mode")
 		return
@@ -122,29 +134,16 @@ func (parms *Parameter) organize() (err error) {
 	if parms.Password == "" {
 		parms.Password = getInput("Password")
 	}
-	parms.ContentPath = strings.Trim(parms.ContentPath, " ")
-	if len(parms.ContentPath) > 0 {
-		if parms.ContentPath[0] != '/' {
-			// println("ContentPath must start with /, not", parms.ContentPath)
-			return fmt.Errorf("ContentPath string must start with / [%s]", parms.ContentPath)
-			// os.Exit(1)
-		}
-		if parms.ContentPath[len(parms.ContentPath)-1] == '/' {
-			// println("ContentPath cannot end with /, not", parms.ContentPath)
-			return fmt.Errorf("ContentPath must not end with / [%s]", parms.ContentPath)
-			// os.Exit(1)
-		}
-	}
 	return nil
 }
 
 func printUsage() {
 	println(`Usage:
-  goshellbox [-s server mode] [-c client mode]  [-P port] [-u username] [-p password] [-cmd command]
+  goshellbox [-s server mode] [-u username] [-p password] [-cmd command]
 
 Example:
-  goshellbox -s -H 192.168.1.1 -P 2024 -u admin -p admin -https -cmd bash
-  goshellbox -c -H 192.168.1.1 -P 2024 -u admin -p admin -https
+  goshellbox -s -H 192.168.1.1:2024 -u admin -p admin -https -cmd bash
+  goshellbox  -H 192.168.1.1:2024 -u admin -p admin -https
 
 Options:`)
 }
